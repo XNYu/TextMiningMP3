@@ -150,8 +150,8 @@ public class Post implements Comparable<Post> , Serializable {
 	}
 
 	public int compareTo(Post p){
-		if(bayesProb>p.getBayesProb())return -1;
-		else if(bayesProb==p.getBayesProb())return 0;
+		if(m_similarity>p.getSimilarity())return -1;
+		else if(m_similarity==p.getSimilarity())return 0;
 		else
 			return 1;
 	}

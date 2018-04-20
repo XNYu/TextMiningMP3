@@ -6,6 +6,7 @@ package analyzer;
 import java.io.*;
 import java.util.*;
 
+import javafx.geometry.Pos;
 import org.tartarus.snowball.SnowballStemmer;
 import org.tartarus.snowball.ext.englishStemmer;
 import org.tartarus.snowball.ext.porterStemmer;
@@ -39,6 +40,7 @@ public class DocAnalyzer {
 	//you can store the loaded reviews in this arraylist for further processing
 	ArrayList<Post> m_reviews;
 	ArrayList<Post> query;
+	ArrayList<HashMap<String,Double>> randomProj;
 	int docLength = 0;
 	int positiveCount,negativeCount,totalCount;
 	//you might need something like this to store the counting statistics for validating Zipf's and computing IDF
@@ -61,6 +63,7 @@ public class DocAnalyzer {
 
 		posLM = new LanguageModel(1, true);
 		negLM = new LanguageModel(1, false);
+		randomProj = new ArrayList<>();
 
 		m_reviews = new ArrayList<Post>();
 		query = new ArrayList<Post>();
@@ -109,13 +112,11 @@ public class DocAnalyzer {
 			while ((line = reader.readLine()) != null) {
 				//it is very important that you perform the same processing operation to the loaded stopwords
 				//otherwise it won't be matched in the text content
-//				line = SnowballStemming(Normalization(line));
 				if (!line.isEmpty()){
-					m_vocabulary.add(line);
-//					String[] idfs = line.split("\t");
-//					m_vocabulary.add(idfs[0]);
-//					double idf = Double.parseDouble(idfs[2]);
-//					m_idf.put(idfs[0],idf);
+					String[] idfs = line.split(",");
+					m_vocabulary.add(idfs[0]);
+					double idf = Double.parseDouble(idfs[1]);
+					m_idf.put(idfs[0],idf);
 				}
 			}
 			reader.close();
@@ -148,7 +149,7 @@ public class DocAnalyzer {
         return c;
 	}  
 
-	public void analyzeDocument(JSONObject json, ArrayList<Post> list) {
+	public void analyzeDocument(JSONObject json, ArrayList<Post> list,boolean isTestSet) {
 		try {
 			JSONArray jarray = json.getJSONArray("Reviews");
 			for(int i=0; i<jarray.length(); i++) {
@@ -212,7 +213,8 @@ public class DocAnalyzer {
 						t.increaseValue();
 						vector.put(token, t);
 					}
-
+					if(isTestSet)
+						continue;
 //calculate DF & positive/negative Counts
                     if(!m_stats.containsKey(token)){
                         Token t = new Token(m_stats.size()+1,token);
@@ -230,24 +232,24 @@ public class DocAnalyzer {
 					}
 				}
 				//Calculate Normalized TF and TF*IDF
-//				Iterator iter = vector.entrySet().iterator();
-//				while (iter.hasNext()){
-//					Map.Entry entry = (Map.Entry)iter.next();
-//					String st = (String)entry.getKey();
-//					Token token = (Token)entry.getValue();
-//					double NormTF;
-//					double value = token.getValue();
-//					if(value>0)
-//						NormTF = 1+Math.log10(value);
-//					else
-//						NormTF = 0;
-//					double idf = m_idf.get(st);
-//					double weight = NormTF*idf;
-//
-//					token.setValue(NormTF);
-//					token.setWeight(weight);
-//					vector.put(st,token);
-//				}
+				Iterator iter = vector.entrySet().iterator();
+				while (iter.hasNext()){
+					Map.Entry entry = (Map.Entry)iter.next();
+					String st = (String)entry.getKey();
+					Token token = (Token)entry.getValue();
+					double NormTF;
+					double value = token.getValue();
+					if(value>0)
+						NormTF = 1+Math.log(value);
+					else
+						NormTF = 0;
+					double idf = m_idf.get(st);
+					double weight = NormTF*idf;
+
+					token.setValue(NormTF);
+					token.setWeight(weight);
+					vector.put(st,token);
+				}
 
 				review.setVct(vector);
                 clearDFStat();
@@ -391,17 +393,17 @@ public class DocAnalyzer {
 			return null;
 		}
 	}
-	
-	// sample code for demonstrating how to recursively load files in a directory 
-	public void LoadDirectory(String folder, String suffix,ArrayList<Post> list) {
+
+	// sample code for demonstrating how to recursively load files in a directory
+	public void LoadDirectory(String folder, String suffix,ArrayList<Post> list,boolean isTestSet) {
 		File dir = new File(folder);
 		int size = list.size();
 		for (File f : dir.listFiles()) {
 			System.out.println(f.getName());
 			if (f.isFile() && f.getName().endsWith(suffix))
-				analyzeDocument(LoadJson(f.getAbsolutePath()),list);
+				analyzeDocument(LoadJson(f.getAbsolutePath()),list,isTestSet);
 			else if (f.isDirectory())
-				LoadDirectory(f.getAbsolutePath(), suffix, list);
+				LoadDirectory(f.getAbsolutePath(), suffix, list,isTestSet);
 		}
 		size = list.size() - size;
 		System.out.println("Loading " + size + " review documents from " + folder);
@@ -542,7 +544,6 @@ public class DocAnalyzer {
 			m_stats.put((String) e.getKey(), t);
 		}
 	}
-
 	public void printIGandChi() throws Exception{
 		FileOutputStream fs = new FileOutputStream(new File("InformationGain&ChiSquare.txt"));
 		PrintStream p = new PrintStream(fs);
@@ -566,17 +567,31 @@ public class DocAnalyzer {
 		}
 		p.close();
 	}
-
 	public void printMap(HashMap<String,Double> map,String name) throws Exception{
 		FileOutputStream fs = new FileOutputStream(new File(name));
 		PrintStream p = new PrintStream(fs);
 		Iterator iter = map.entrySet().iterator();
 		while (iter.hasNext()){
 			Map.Entry entry = (Map.Entry)iter.next();
-
 			p.println(entry.getKey()+","+entry.getValue());
 		}
 		p.close();
+	}
+	public void printList(List<Post> list,String name){
+		try {
+			FileOutputStream fs = new FileOutputStream(new File(name));
+			PrintStream p = new PrintStream(fs);
+			for(Post post:list){
+				p.println(post.getSimilarity());
+				p.println(post.getAuthor());
+				p.println(post.getDate());
+				p.println(post.getContent());
+				p.println();p.println();p.println();
+			}
+			p.close();
+		} catch (Exception e) {
+			System.out.println(e);
+		}
 	}
 
 	public void taskTwoPointOne(){
@@ -600,7 +615,6 @@ public class DocAnalyzer {
 		}
 		p.close();
 	}
-
 	public void taskTwoPointTwo(){
 		//first calculate all bayes prediction
 		int len = m_reviews.size();
@@ -637,7 +651,6 @@ public class DocAnalyzer {
 		} catch (Exception e) {
 		}
 	}
-
 	public double calculateBayes(Post post){
 		double firstPart = Math.log((double) positiveCount/negativeCount);
 		double secondPart=0;
@@ -648,6 +661,26 @@ public class DocAnalyzer {
 			secondPart += toAdd;
 		}
 		return firstPart + secondPart;
+	}
+
+	public void calculateIDF(){
+		for(Map.Entry e:m_stats.entrySet()){
+			String word = (String) e.getKey();
+			Token t = (Token) e.getValue();
+			double df = t.getValue();
+			double idf = 1+Math.log((double)55233/df);
+			m_idf.put(word, idf);
+		}
+		try {
+			FileOutputStream fs = new FileOutputStream(new File("IDFVocabulary.txt"));
+			PrintStream p = new PrintStream(fs);
+			for(Map.Entry e:m_idf.entrySet()){
+				p.println(e.getKey()+","+e.getValue());
+			}
+			p.close();
+		} catch (Exception e) {
+			System.out.println(e);
+		}
 	}
 
 	public void printReviews(int i,List<Post> list) throws Exception{
@@ -664,17 +697,120 @@ public class DocAnalyzer {
 		p.close();
 	}
 
-	public List<Post> similarWithQuery(Post q){
+	public void TaskThree(){
+		createRandomProjection();
+		long beginTime = System.currentTimeMillis();
+		KNNByHash(5,m_reviews);
+		long endTimeOne = System.currentTimeMillis();
+		KNN(5, m_reviews);
+		long endTimeTwo = System.currentTimeMillis();
+		System.out.println("Hash Run Time:"+(endTimeOne-beginTime));
+		System.out.println("Brute Force Run Time:"+(endTimeTwo-endTimeOne));
+	}
+
+	public void KNN(int k,ArrayList<Post> qF){
+		int i = 1;
+		for(Post q:query){
+			long beginTime = System.currentTimeMillis();
+			List<Post> KNN =similarWithQuery(k,qF,q);
+			long endTime = System.currentTimeMillis();
+			System.out.println("Force "+i+":"+ (endTime-beginTime));
+			printList(KNN,"NormalKNN"+i+".txt");
+			i++;
+		}
+	}
+
+	public HashMap<Integer,ArrayList<Post>> HashReviews(ArrayList<Post> queryFrom){
+		HashMap<Integer, ArrayList<Post>> answer = new HashMap<>();
+		for (Post p:queryFrom){
+			int newHash = hash(p);
+			if(answer.containsKey(newHash)){
+				ArrayList<Post> posts = answer.get(newHash);
+				posts.add(p);
+				answer.put(newHash, posts);
+			}
+			else {
+				ArrayList<Post> posts = new ArrayList<>();
+				posts.add(p);
+				answer.put(newHash, posts);
+			}
+		}
+		return answer;
+	}
+
+	public void KNNByHash(int k,ArrayList<Post> qF){
+		int i=1;
+
+		long beginTime = System.currentTimeMillis();
+		HashMap<Integer, ArrayList<Post>> hashedReviews = HashReviews(qF);
+		long endTimeOne = System.currentTimeMillis();
+
+		for (Post q:query){
+			int hashCode = hash(q);
+			ArrayList<Post> queryFrom = hashedReviews.get(hashCode);
+			long beginTimeTwo = System.currentTimeMillis();
+			List<Post> KNN = similarWithQuery(k, queryFrom, q);
+			long endTime = System.currentTimeMillis();
+			printList(KNN,"KNNHash"+i+".txt");
+			System.out.println("Hash "+i+":"+ (endTimeOne-beginTime)+","+(endTime-beginTimeTwo));
+			i++;
+		}
+	}
+
+	public List<Post> similarWithQuery(int k,ArrayList<Post> queryFrom,Post q){
 		ArrayList<Post> answers = new ArrayList<>();
-		for(Post review:m_reviews){
+		for(Post review:queryFrom){
 			double similarity = q.similiarity(review);
 			review.setSimilarity(similarity);
 			answers.add(review);
 		}
 		Collections.sort(answers);
-		Collections.reverse(answers);
-		return answers.subList(0,3);
+		return answers.subList(0,k);
 	}
+
+	public void createRandomProjection(){
+		for (int i = 0; i < 5; i++) {
+			HashMap<String, Double> randomMap = new HashMap<>();
+			for(String token:m_stats.keySet()){
+				double random = Math.random();
+				random = 2 * random - 1;
+				randomMap.put(token, random);
+			}
+			randomProj.add(randomMap);
+		}
+	}
+
+	public int hash(Post post){
+		HashMap<String, Token> vct = post.getVct();
+		int answer=0;
+		for (int i = 0; i < 5; i++) {
+			HashMap<String, Double> randomProjection = randomProj.get(i);
+			double total =0;
+			for(Map.Entry e:vct.entrySet()){
+				String token = (String) e.getKey();
+				Token t = (Token) e.getValue();
+				double weight = t.getWeight();
+				double number = randomProjection.get(token);
+				total += weight * number;
+			}
+			int hashCode = total >= 0 ? 1 : 0;
+			double index = Math.pow(2, i);
+			answer += hashCode * index;
+		}
+		return answer;
+	}
+
+//	public List<Post> similarWithQuery(Post q){
+//		ArrayList<Post> answers = new ArrayList<>();
+//		for(Post review:m_reviews){
+//			double similarity = q.similiarity(review);
+//			review.setSimilarity(similarity);
+//			answers.add(review);
+//		}
+//		Collections.sort(answers);
+//		Collections.reverse(answers);
+//		return answers.subList(0,3);
+//	}
 
 	public void saveModel(LanguageModel lm,String path){
 		try
@@ -691,7 +827,6 @@ public class DocAnalyzer {
 			i.printStackTrace();
 		}
 	}
-
 	public LanguageModel readModel(String path){
 		LanguageModel lm;
 		try
@@ -714,7 +849,6 @@ public class DocAnalyzer {
 			return null;
 		}
 	}
-
 	public double calculatePerplexity(Post p,LanguageModel lm,boolean isLinear){
 		int m_N = lm.m_N;
 		double answer=1;
@@ -743,7 +877,6 @@ public class DocAnalyzer {
 		answer = Math.pow(answer,1.0/docLength);
 		return answer;
 	}
-
 	public double calculatePerplexity2(Post p,LanguageModel lm,boolean isLinear){
 		int m_N = lm.m_N;
 		double answer=0;
@@ -761,7 +894,6 @@ public class DocAnalyzer {
 		answer = Math.exp(answer);
 		return answer;
 	}
-
 	public double StandardDiviation(double[] x) {
         int m = x.length;
 		double sum=0;
@@ -782,12 +914,15 @@ public class DocAnalyzer {
 		//load stopwords
 
 		analyzer.LoadStopwords("./data/StopWords.txt");
-		analyzer.LoadVocabulary("./data/IGCHIVocabulary.txt");
+		analyzer.LoadVocabulary("./data/IDFVocabulary.txt");
 
         //entry point to deal with a collection of documents
-		analyzer.LoadDirectory("./Data/yelp", ".json", analyzer.m_reviews);
-		analyzer.taskTwoPointOne();
-		analyzer.taskTwoPointTwo();
+		analyzer.LoadDirectory("./Data/yelp", ".json", analyzer.m_reviews,false);
+		analyzer.LoadDirectory("./Data/query", ".json", analyzer.query, true);
+		analyzer.TaskThree();
+//		analyzer.calculateIDF();
+		//		analyzer.taskTwoPointOne();
+//		analyzer.taskTwoPointTwo();
 
 		System.out.println(analyzer.m_stats.size());
 		System.out.println(analyzer.m_reviews.size());

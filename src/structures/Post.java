@@ -71,6 +71,12 @@ public class Post implements Comparable<Post> , Serializable {
 		if (!content.isEmpty())
 			this.m_content = content;
 	}
+	boolean predictedByKNN;
+	public void setPredictedByKNN(boolean p){
+		predictedByKNN = p;}
+	public boolean getPredictedByKNN(){
+		return predictedByKNN;
+	}
 	
 	public boolean isEmpty() {
 		return m_content==null || m_content.isEmpty();

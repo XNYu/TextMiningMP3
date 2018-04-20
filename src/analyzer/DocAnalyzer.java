@@ -215,21 +215,7 @@ public class DocAnalyzer {
 					}
 					if(isTestSet)
 						continue;
-//calculate DF & positive/negative Counts
-                    if(!m_stats.containsKey(token)){
-                        Token t = new Token(m_stats.size()+1,token);
-                        t.increaseValue();
-                        t.setPositive(positive);
-                        m_stats.put(token,t);
-                        tokenDFCalculated.put(token,true);
-                    }
-                    else if(m_stats.containsKey(token)&&!tokenDFCalculated.get(token)){
-						Token t = m_stats.get(token);
-						t.increaseValue();
-						t.setPositive(positive);
-						m_stats.put(token,t);
-						tokenDFCalculated.put(token,true);
-					}
+
 				}
 				//Calculate Normalized TF and TF*IDF
 				Iterator iter = vector.entrySet().iterator();
@@ -268,24 +254,10 @@ public class DocAnalyzer {
 		}
 	}
 
-	public void increaseNum(){
-		String token = "NUM";
-		if(m_stats.containsKey(token)){
-			Token t = m_stats.get(token);
-			t.increaseValue();
-			m_stats.put(token,t);
-		}
-		else{
-			Token t = new Token(m_stats.size()+1,token);
-			t.increaseValue();
-			m_stats.put(token,t);
-		}
-	}
-
-	public void createLanguageModel(LanguageModel languageModel) {
+	public void createLanguageModel(LanguageModel languageModel,HashMap<String,Token> map) {
 		//m_langModel = new LanguageModel(m_N, m_stats.size());
 
-		languageModel.m_model = new HashMap<>(m_stats);
+		languageModel.m_model = new HashMap<>(map);
 		languageModel.setPositiveCount(positiveCount);
 		languageModel.setNegativeCount(negativeCount);
 		languageModel.calcBayesProb();
@@ -450,37 +422,6 @@ public class DocAnalyzer {
 		return m_tokenizer.tokenize(text);
 	}
 	
-	public void TokenizerDemon(String text) {
-		System.out.format("Token\tNormalization\tSnonball Stemmer\tPorter Stemmer\n");
-		for(String token:m_tokenizer.tokenize(text)){
-			String normal = Normalization(token);
-			System.out.format("%s\t%s\t%s\t%s\n", token, normal, SnowballStemming(normal), PorterStemming(normal));
-		}
-
-	}
-
-	public String[] generateNGrams(String[] tokens){
-		String[] NGrams = new String[tokens.length-m_N+1];
-		for (int i = 0; i < tokens.length-m_N+1; i++) {
-			String NToken = tokens[i];
-            if(NToken.equals(""))
-            {
-                NGrams[i] = "";
-                continue;
-            }
-			for (int j = i+1; j < i+m_N; j++) {
-                while(j<tokens.length&&tokens[j].equals("")){
-                    j++;
-                }
-                if(j==tokens.length)
-                    continue;
-			    NToken = NToken + "-" + tokens[j];
-            }
-			NGrams[i] = NToken;
-		}
-		return NGrams;
-	}
-
     //After each review, clear DF Stat
 	public void clearDFStat(){
         Iterator iter = tokenDFCalculated.entrySet().iterator();
@@ -595,8 +536,8 @@ public class DocAnalyzer {
 	}
 
 	public void taskTwoPointOne(){
-		createLanguageModel(posLM);
-		createLanguageModel(negLM);
+		createLanguageModel(posLM,m_stats);
+		createLanguageModel(negLM,m_stats);
 //		try {
 //			printTaskTwoPointOne();
 //		} catch (Exception e) {
@@ -682,7 +623,6 @@ public class DocAnalyzer {
 			System.out.println(e);
 		}
 	}
-
 	public void printReviews(int i,List<Post> list) throws Exception{
 		FileOutputStream fs = new FileOutputStream(new File("CWC"+i+".txt"));
 		PrintStream p = new PrintStream(fs);
@@ -707,7 +647,6 @@ public class DocAnalyzer {
 		System.out.println("Hash Run Time:"+(endTimeOne-beginTime));
 		System.out.println("Brute Force Run Time:"+(endTimeTwo-endTimeOne));
 	}
-
 	public void KNN(int k,ArrayList<Post> qF){
 		int i = 1;
 		for(Post q:query){
@@ -719,8 +658,7 @@ public class DocAnalyzer {
 			i++;
 		}
 	}
-
-	public HashMap<Integer,ArrayList<Post>> HashReviews(ArrayList<Post> queryFrom){
+	public HashMap<Integer,ArrayList<Post>> HashReviews(List<Post> queryFrom){
 		HashMap<Integer, ArrayList<Post>> answer = new HashMap<>();
 		for (Post p:queryFrom){
 			int newHash = hash(p);
@@ -737,7 +675,6 @@ public class DocAnalyzer {
 		}
 		return answer;
 	}
-
 	public void KNNByHash(int k,ArrayList<Post> qF){
 		int i=1;
 
@@ -756,8 +693,7 @@ public class DocAnalyzer {
 			i++;
 		}
 	}
-
-	public List<Post> similarWithQuery(int k,ArrayList<Post> queryFrom,Post q){
+	public List<Post> similarWithQuery(int k,List<Post> queryFrom,Post q){
 		ArrayList<Post> answers = new ArrayList<>();
 		for(Post review:queryFrom){
 			double similarity = q.similiarity(review);
@@ -767,11 +703,10 @@ public class DocAnalyzer {
 		Collections.sort(answers);
 		return answers.subList(0,k);
 	}
-
 	public void createRandomProjection(){
 		for (int i = 0; i < 5; i++) {
 			HashMap<String, Double> randomMap = new HashMap<>();
-			for(String token:m_stats.keySet()){
+			for(String token:m_vocabulary){
 				double random = Math.random();
 				random = 2 * random - 1;
 				randomMap.put(token, random);
@@ -779,7 +714,6 @@ public class DocAnalyzer {
 			randomProj.add(randomMap);
 		}
 	}
-
 	public int hash(Post post){
 		HashMap<String, Token> vct = post.getVct();
 		int answer=0;
@@ -799,6 +733,153 @@ public class DocAnalyzer {
 		}
 		return answer;
 	}
+
+	public void calculateMStats(List<Post> posts){
+		//calculate DF & positive/negative Counts
+		m_stats = new HashMap<>();
+		for(Post p:posts){
+			boolean positive = p.getPositive();
+			for(String token:p.getTokens()){
+				if(!m_stats.containsKey(token)){
+					Token t = new Token(m_stats.size()+1,token);
+					t.increaseValue();
+					t.setPositive(positive);
+					m_stats.put(token,t);
+					tokenDFCalculated.put(token,true);
+				}
+				else if(m_stats.containsKey(token)&&!tokenDFCalculated.get(token)){
+					Token t = m_stats.get(token);
+					t.increaseValue();
+					t.setPositive(positive);
+					m_stats.put(token,t);
+					tokenDFCalculated.put(token,true);
+				}
+			}
+			clearDFStat();
+		}
+	}
+	public void cleanAndCalCounts(List<Post> posts){
+		positiveCount=0;
+		negativeCount=0;
+		for(Post p:posts){
+			if(p.getPositive())
+				positiveCount++;
+			else
+				negativeCount++;
+		}
+	}
+	public void crossValidation(int k){
+		List<Post> train = new ArrayList<>();
+		List<Post> test = new ArrayList<>();
+		double precisionBayes=0;
+		double recallBayes=0;
+		double F1Bayes=0;
+		double precisionK=0;
+		double recallK=0;
+		double F1K=0;
+
+		int len = m_reviews.size();
+		int unitLen = len / 10;
+		for (int i = 0; i < 10; i++) {
+			if(i==0){
+				test = new ArrayList<>(m_reviews.subList(i,unitLen));
+				train = new ArrayList<>(m_reviews.subList(unitLen, len));
+			}
+			else{
+				test = new ArrayList<>(m_reviews.subList(i*unitLen,(i+1)*unitLen));
+				train = new ArrayList<>(m_reviews.subList(0, i * unitLen));
+				train.addAll(m_reviews.subList((i + 1) * unitLen,len));
+			}
+			long beginOne = System.currentTimeMillis();
+			//Test Bayes
+			cleanAndCalCounts(train);
+			calculateMStats(train);
+			posLM = new LanguageModel(1, true);
+			negLM = new LanguageModel(1, false);
+			createLanguageModel(posLM, m_stats);
+			createLanguageModel(negLM, m_stats);
+
+			int testLen = test.size();
+			for (int j = 0; j < testLen; j++) {
+				Post p = test.get(j);
+				double bayesProb = calculateBayes(p);
+				p.setBayesProb(bayesProb);
+				test.set(j,p);
+			}
+
+			double TP = 0, FP = 0, FN = 0, TN = 0;
+			for(Post p:test) {
+				if (p.getBayesProb() >= 0) {
+					if (p.getPositive())
+						TP++;
+					else
+						FP++;
+				} else {
+					if (p.getPositive())
+						FN++;
+					else
+						TN++;
+				}
+			}
+			double precision = TP / (TP + FP);
+			double recall = TP / (TP + FN);
+			double F1 = 2 / (1 / precision + 1 / recall);
+			precisionBayes += precision;
+			recallBayes += recall;
+			F1Bayes += F1;
+			long endOne = System.currentTimeMillis();
+			System.out.println(i + "st round takes" + (endOne-beginOne)+"ms for Bayes");
+
+			//test KNN
+			TP = 0; FP = 0; FN = 0; TN = 0;
+			beginOne = System.currentTimeMillis();
+			createRandomProjection();
+			HashMap<Integer, ArrayList<Post>> hashedReviews = HashReviews(train);
+			for (Post q:test){
+				int hashCode = hash(q);
+				ArrayList<Post> queryFrom = hashedReviews.get(hashCode);
+				List<Post> KNN = similarWithQuery(k, queryFrom, q);
+				int isPositive=0;
+				for(Post p:KNN){
+					if(p.getPositive())
+						isPositive++;
+				}
+				if(isPositive>2)
+				{
+					q.setPredictedByKNN(true);
+					if(q.getPositive())
+						TP++;
+					else
+						FP++;
+				}
+				else{
+					q.setPredictedByKNN(false);
+					if(q.getPositive())
+						FN++;
+					else
+						TN++;
+				}
+			}
+			precision = TP / (TP + FP);
+			recall = TP / (TP + FN);
+			F1 = 2 / (1 / precision + 1 / recall);
+			precisionK += precision;
+			recallK += recall;
+			F1K += F1;
+			endOne = System.currentTimeMillis();
+			System.out.println(i + "st round takes" + (endOne-beginOne)+"ms for KNN");
+		}
+		precisionBayes = precisionBayes / 10;
+		recallBayes = recallBayes/10;
+		F1Bayes = F1Bayes / 10;
+		precisionK = precisionK / 10;
+		recallK = recallK / 10;
+		F1K = F1K / 10;
+		System.out.println("Bayes:P="+precisionBayes+",R="+recallBayes+",F="+F1Bayes);
+		System.out.println("KNN:P="+precisionK+",R="+recallK+",F="+F1K);
+
+	}
+
 
 //	public List<Post> similarWithQuery(Post q){
 //		ArrayList<Post> answers = new ArrayList<>();
@@ -918,9 +999,8 @@ public class DocAnalyzer {
 
         //entry point to deal with a collection of documents
 		analyzer.LoadDirectory("./Data/yelp", ".json", analyzer.m_reviews,false);
-		analyzer.LoadDirectory("./Data/query", ".json", analyzer.query, true);
-		analyzer.TaskThree();
-//		analyzer.calculateIDF();
+		analyzer.crossValidation(5);
+		//		analyzer.calculateIDF();
 		//		analyzer.taskTwoPointOne();
 //		analyzer.taskTwoPointTwo();
 

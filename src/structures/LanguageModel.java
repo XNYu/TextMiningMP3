@@ -36,7 +36,7 @@ public class LanguageModel implements Serializable {
 	public LanguageModel(int N, boolean pos) {
 		m_N = N;
 		m_model = new HashMap<String, Token>();
-		m_lambda=1;
+		m_lambda=0.1;
 		m_delta=0.1;
 		MapOfS = new HashMap<>();
 		positive = pos;

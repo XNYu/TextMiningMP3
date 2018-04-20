@@ -175,6 +175,8 @@ public class DocAnalyzer {
 					tokens[j] = token;
 					if(hasStopWords(token))
 						tokens[j] = "";
+					if(!m_vocabulary.contains(token))
+						tokens[j] = "";
 				}
 				review.setTokens(tokens);
 
@@ -736,8 +738,8 @@ public class DocAnalyzer {
 		for(Post p:posts){
 			boolean positive = p.getPositive();
 			for(String token:p.getTokens()){
-				if(!m_vocabulary.contains(token))
-					continue;
+//				if(!m_vocabulary.contains(token))
+//					continue;
 				if(!m_stats.containsKey(token)){
 					Token t = new Token(1,token);
 					t.increaseValue();
@@ -793,12 +795,7 @@ public class DocAnalyzer {
 			//Test Bayes
 
 			cleanAndCalCounts(train);
-
-			long bOne = System.currentTimeMillis();
 			calculateMStats(train);
-			long eOne = System.currentTimeMillis();
-			System.out.println(eOne-bOne);
-
 
 			posLM = new LanguageModel(1, true);
 			negLM = new LanguageModel(1, false);
@@ -825,9 +822,12 @@ public class DocAnalyzer {
 						TN++;
 				}
 			}
+			System.out.println(TP+","+FP+","+FN+","+TN);
 			double precision = TP / (TP + FP);
 			double recall = TP / (TP + FN);
 			double F1 = 2 / (1 / precision + 1 / recall);
+			double accuracyBayes = ((TP + TN) / testLen);
+			System.out.println(accuracyBayes);
 			precisionBayes += precision;
 			recallBayes += recall;
 			F1Bayes += F1;
@@ -870,6 +870,8 @@ public class DocAnalyzer {
 			precisionK += precision;
 			recallK += recall;
 			F1K += F1;
+			double accuracyK = ((TP + TN) / testLen);
+			System.out.println(accuracyK);
 			endOne = System.currentTimeMillis();
 			System.out.println(i + "st round takes" + (endOne-beginOne)+"ms for KNN");
 		}

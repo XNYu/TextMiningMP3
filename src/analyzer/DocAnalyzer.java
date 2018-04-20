@@ -424,13 +424,10 @@ public class DocAnalyzer {
 	
     //After each review, clear DF Stat
 	public void clearDFStat(){
-        Iterator iter = tokenDFCalculated.entrySet().iterator();
-        while (iter.hasNext()){
-            Map.Entry entry = (Map.Entry)iter.next();
-            String t = (String)entry.getKey();
+        for (Map.Entry e:tokenDFCalculated.entrySet()){
+            String t = (String)e.getKey();
             tokenDFCalculated.put(t,false);
         }
-
 	}
 
 	public double calculateLog(double number){
@@ -736,12 +733,13 @@ public class DocAnalyzer {
 
 	public void calculateMStats(List<Post> posts){
 		//calculate DF & positive/negative Counts
-		m_stats = new HashMap<>();
 		for(Post p:posts){
 			boolean positive = p.getPositive();
 			for(String token:p.getTokens()){
+				if(!m_vocabulary.contains(token))
+					continue;
 				if(!m_stats.containsKey(token)){
-					Token t = new Token(m_stats.size()+1,token);
+					Token t = new Token(1,token);
 					t.increaseValue();
 					t.setPositive(positive);
 					m_stats.put(token,t);
@@ -761,6 +759,7 @@ public class DocAnalyzer {
 	public void cleanAndCalCounts(List<Post> posts){
 		positiveCount=0;
 		negativeCount=0;
+		m_stats = new HashMap<>();
 		for(Post p:posts){
 			if(p.getPositive())
 				positiveCount++;
@@ -792,13 +791,19 @@ public class DocAnalyzer {
 			}
 			long beginOne = System.currentTimeMillis();
 			//Test Bayes
+
 			cleanAndCalCounts(train);
+
+			long bOne = System.currentTimeMillis();
 			calculateMStats(train);
+			long eOne = System.currentTimeMillis();
+			System.out.println(eOne-bOne);
+
+
 			posLM = new LanguageModel(1, true);
 			negLM = new LanguageModel(1, false);
 			createLanguageModel(posLM, m_stats);
 			createLanguageModel(negLM, m_stats);
-
 			int testLen = test.size();
 			for (int j = 0; j < testLen; j++) {
 				Post p = test.get(j);
@@ -806,7 +811,6 @@ public class DocAnalyzer {
 				p.setBayesProb(bayesProb);
 				test.set(j,p);
 			}
-
 			double TP = 0, FP = 0, FN = 0, TN = 0;
 			for(Post p:test) {
 				if (p.getBayesProb() >= 0) {
@@ -1002,7 +1006,7 @@ public class DocAnalyzer {
 		analyzer.crossValidation(5);
 		//		analyzer.calculateIDF();
 		//		analyzer.taskTwoPointOne();
-//		analyzer.taskTwoPointTwo();
+		//		analyzer.taskTwoPointTwo();
 
 		System.out.println(analyzer.m_stats.size());
 		System.out.println(analyzer.m_reviews.size());
